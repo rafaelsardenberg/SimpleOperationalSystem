@@ -68,19 +68,14 @@ int main(int argc, char** argv){
 	
 	string aux;
 	aux.clear();
-	i=0;
-	j=0;
-	k=0;
+	i=0,j=0,k=0;
 	while(getline(inputFile,linha)){
 		auxiliar.PID = i;
-		j = 0;
 		
 		for(k = 0;k<8;k++){
-			while(linha[j] != ',' && linha[j] != '\0' && j < linha.size()){
+			while(linha[j] != ',' && linha[j] != '\0'){
 				aux += linha[j];
-				j++;
 			}
-			j++;
 		
 			switch(k){
 				case 0:
@@ -115,11 +110,10 @@ int main(int argc, char** argv){
 		}
 		vetorProcessos.push_back(auxiliar);
 		i++;
-		linha.clear();
 	}
 
 	
-	verificarVector(vetorProcessos);
+	//verificarVector(vetorProcessos);
 
 
 
