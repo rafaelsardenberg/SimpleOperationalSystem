@@ -1,9 +1,9 @@
-#include<iostream>
-#include<vector>
-#include<string>
-#include<cstdio>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <cstdio>
 #include <fstream>
-#include<cstdlib>
+#include <cstdlib>
 #include <unistd.h>
 
 
@@ -24,6 +24,8 @@ typedef struct S_processo{
 	int disco;
 	int tempoFaltando;
 	int jaAlocado;
+	int enderecoInicial;
+	int bloqueado;
 }S_processo;
 
 typedef struct S_memoria{
@@ -31,26 +33,27 @@ typedef struct S_memoria{
 }S_memoria;
 
 S_memoria vetorMemoria[1024];
+vector<S_processo> vetorProcessos;
 
 int modem;
 int scanner;
 int impressora;
 int disco;
 
-void verificarVector(vector<S_processo> vetor){
+void verificarVector(){
 	unsigned int i;
 	
-	for(i=0;i<vetor.size();i++){
+	for(i=0;i<vetorProcessos.size();i++){
 		cout << endl;
-		cout << "PID: " << vetor[i].PID << endl;
-		cout << "tempoInicializacao: " << vetor[i].tempoInicializacao << endl;
-		cout << "Prioridade: " << vetor[i].prioridade << endl;
-		cout << "Tempo processador: " << vetor[i].tempoProcessador << endl;
-		cout << "numBlocos: " << vetor[i].numBlocos << endl;
-		cout << "impressora: " << vetor[i].impressora << endl;
-		cout << "scanner: " << vetor[i].scanner << endl;
-		cout << "modem: " << vetor[i].modem << endl;
-		cout << "disco: " << vetor[i].disco << endl;
+		cout << "PID: " << vetorProcessos[i].PID << endl;
+		cout << "tempoInicializacao: " << vetorProcessos[i].tempoInicializacao << endl;
+		cout << "Prioridade: " << vetorProcessos[i].prioridade << endl;
+		cout << "Tempo processador: " << vetorProcessos[i].tempoProcessador << endl;
+		cout << "numBlocos: " << vetorProcessos[i].numBlocos << endl;
+		cout << "impressora: " << vetorProcessos[i].impressora << endl;
+		cout << "scanner: " << vetorProcessos[i].scanner << endl;
+		cout << "modem: " << vetorProcessos[i].modem << endl;
+		cout << "disco: " << vetorProcessos[i].disco << endl;
 		
 	}
 	
@@ -70,11 +73,11 @@ void printDisparador(S_processo processo){
 		
 }
 
-int verificarFinalizou(vector<S_processo> vetor){
+int verificarFinalizou(){
 	unsigned int i;
 	
-	for(i = 0; i<vetor.size();i++){
-		if(vetor[i].tempoFaltando > 0){
+	for(i = 0; i<vetorProcessos.size();i++){
+		if(vetorProcessos[i].tempoFaltando > 0){
 			return 0;
 		}
 	}
@@ -83,58 +86,28 @@ int verificarFinalizou(vector<S_processo> vetor){
 	
 }
 
-int escolherProcesso(vector<S_processo> vetor, int tempo){
-	unsigned int i;
-	int processoEscolhido;
-	
-	processoEscolhido = -1;
-	for(i = 0; i<vetor.size();i++){
-		
-		if(vetor[i].tempoFaltando > 0 && vetor[i].tempoInicializacao <= tempo){
-			if(processoEscolhido != -1) {
-				if(vetor[i].prioridade < vetor[processoEscolhido].prioridade) {
-					processoEscolhido = i;
-				}
-			} else {
-				processoEscolhido = i;	
-			}
+int temEspaco(int requisicao){
+	int i;
+	int cont = 0;
+
+	for(i=0;i<1024;i++){
+		if(cont == requisicao) {
+			return i - requisicao;
+		} else if(vetorMemoria[i].ocupado != 1){
+			cont++;
+		} else {
+			cont = 0;
 		}
 	}
-	
-	for(i = 0; i< vetor.size();i++){
-		if(processoEscolhido != i && vetor[i].tempoFaltando > 0 && vetor[i].tempoInicializacao <= tempo){
-			if(vetor[i].prioridade > 0){
-				vetor[i].prioridade--;
-			}
-		}
-	}
-	
-	
-	return processoEscolhido;
-	
+	return -1;
 }
 
-bool alocarMemoria(int blocos){
+void alocarMemoria(int enderecoInicial, int numBlocos){
 	int i;
-	int j;
 	
-	i = 0;
-	while(i < 1024 && vetorMemoria[i].ocupado == 1){
-		i++;
+	for(i=enderecoInicial; i < enderecoInicial + numBlocos; i++){
+		vetorMemoria[i].ocupado = 1;
 	}
-	
-	
-	if(i >= 1024){
-		return false;
-	}else{
-		j = i;
-		for(i = i;i<blocos + j;i++){
-			vetorMemoria[i].ocupado = 1;
-		}
-		
-		return true;
-	}
-	
 }
 
 int memoriaUtilizada(void){
@@ -150,6 +123,7 @@ int memoriaUtilizada(void){
 	return espacoUtilizado;
 }
 
+//TO-DO: Desalocar de acordo com o endereço inicial do bloco
 void desalocar(int blocos){
 	int i,j;
 	int feito;
@@ -168,106 +142,140 @@ void desalocar(int blocos){
 	}
 }
 
-int temEspaco(int requisicao){
-	if(1024 - memoriaUtilizada() >= requisicao){
-		return 1;
-	}else{
-		return 0;
+int escolherProcesso(int tempo){
+	unsigned int i;
+	int processoEscolhido;
+	int enderecoInicial;
+	int achouProcesso = 0;
+
+	while(!achouProcesso) {
+		processoEscolhido = -1;
+		for(i = 0; i<vetorProcessos.size();i++){
+			if(vetorProcessos[i].tempoFaltando > 0 && vetorProcessos[i].tempoInicializacao <= tempo && vetorProcessos[i].bloqueado == 0){
+				if(processoEscolhido != -1) {
+					if(vetorProcessos[i].prioridade < vetorProcessos[processoEscolhido].prioridade) {
+						processoEscolhido = i;
+					}
+				} else {
+					processoEscolhido = i;	
+				}
+			}
+		}
+		
+		//Verifica se existe memória disponível
+		if(processoEscolhido != -1) {
+			//Verifica se o processo já foi alocado
+			if(vetorProcessos[processoEscolhido].jaAlocado == 0){
+				enderecoInicial = temEspaco(vetorProcessos[processoEscolhido].numBlocos);
+				//Verifica se existe memória
+				if(enderecoInicial != -1) {
+					vetorProcessos[processoEscolhido].enderecoInicial = enderecoInicial;	
+					vetorProcessos[processoEscolhido].jaAlocado = 1;		
+					alocarMemoria(enderecoInicial, vetorProcessos[processoEscolhido].numBlocos);					
+					achouProcesso = 1;
+				} else {
+					vetorProcessos[processoEscolhido].bloqueado = 1;
+				}
+			} else {
+				//Se já tiver sido alocado
+				achouProcesso = 1;
+			}
+		} else {
+			//Retorna sem achar nenhum processo possível de ser executado
+			achouProcesso = 1;
+		}
 	}
+
+	//Desbloqueia todos os processos
+	for(i = 0; i<vetorProcessos.size();i++){
+		vetorProcessos[i].bloqueado = 0;
+	}
+
+	//Aging
+	for(i = 0; i< vetorProcessos.size();i++){
+		if(processoEscolhido != i && vetorProcessos[i].tempoFaltando > 0 && vetorProcessos[i].tempoInicializacao <= tempo){
+			if(vetorProcessos[i].prioridade > 0){
+				vetorProcessos[i].prioridade--;
+			}
+		}
+	}
+	
+	return processoEscolhido;
 }
 
-void processador(vector<S_processo> vetor){
+void processador(){
 	int tempo = 0;
 	int finalizou = 0;
 	int indiceP;
 	int pidAnterior;
-	bool alocou;
 	int memoriaEmUso;
 	
 	pidAnterior = -1;
 	while(!finalizou){
-		
-		indiceP = escolherProcesso(vetor, tempo);
-		
+		indiceP = escolherProcesso(tempo);
+
 		if(indiceP != -1){
-			if(vetor[indiceP].jaAlocado == 0){
-				if(temEspaco(vetor[indiceP].numBlocos)) {			
-					alocou = alocarMemoria(vetor[indiceP].numBlocos);
-					printDisparador(vetor[indiceP]);
-					cout << endl << "*********Processo " << vetor[indiceP].PID << "**************" << endl;
-					
-					cout << "instrucao " << (vetor[indiceP].tempoProcessador - vetor[indiceP].tempoFaltando + 1) << endl;
-					vetor[indiceP].tempoFaltando--;
-					pidAnterior = vetor[indiceP].PID;
-					
-					vetor[indiceP].jaAlocado = 1;
-				}else{
-					cout << "Nao ha mais espaco em memoria" << endl;
-					cout << "Finalizando SO." << endl;
-					finalizou = 1;
-				}
-			} else {
-				if(pidAnterior != vetor[indiceP].PID){
-					printDisparador(vetor[indiceP]);
-					cout << endl << "*********Processo " << vetor[indiceP].PID << "**************" << endl;
-				}
-				
-				cout << "instrucao " << (vetor[indiceP].tempoProcessador - vetor[indiceP].tempoFaltando + 1) << endl;
-				vetor[indiceP].tempoFaltando--;
-				pidAnterior = vetor[indiceP].PID;
+			if(pidAnterior != vetorProcessos[indiceP].PID){
+				printDisparador(vetorProcessos[indiceP]);	
+			
+				//Impressão
+				cout << endl << "*********Processo " << vetorProcessos[indiceP].PID << "**************" << endl;
 			}
 			
-			//verificar se acabou
-			if(vetor[indiceP].tempoFaltando == 0){
-				//acabou!
-				//desalocar
+			//Impressão
+			cout << "instrucao " << (vetorProcessos[indiceP].tempoProcessador - vetorProcessos[indiceP].tempoFaltando + 1) << endl;
+
+			vetorProcessos[indiceP].tempoFaltando--;
+			pidAnterior = vetorProcessos[indiceP].PID;
+
+			//Verifica se acabou
+			if(vetorProcessos[indiceP].tempoFaltando == 0){
 				memoriaEmUso = memoriaUtilizada();
 				cout << memoriaEmUso << " blocos de memória sendo utilizados" << endl;
-				desalocar(vetor[indiceP].numBlocos);
-				cout << "Finalizando processo " << vetor[indiceP].PID << ", Liberando memória." << endl << endl;
+				desalocar(vetorProcessos[indiceP].numBlocos);
+				cout << "Finalizando processo " << vetorProcessos[indiceP].PID << ", Liberando memória." << endl << endl;
 				impressora = 0;
 				scanner = 0;
 				modem = 0;
 				disco = 0;
 			}
-			
-			if(vetor[indiceP].impressora != 0 && impressora == 0){
-				cout << "Impressora " << vetor[indiceP].impressora << " em uso pelo processo." << endl;
+		
+			//TO-DO	
+			if(vetorProcessos[indiceP].impressora != 0 && impressora == 0){
+				cout << "Impressora " << vetorProcessos[indiceP].impressora << " em uso pelo processo." << endl;
 				impressora = 1;
 			}
-			if(vetor[indiceP].scanner != 0 && scanner == 0){
+			if(vetorProcessos[indiceP].scanner != 0 && scanner == 0){
 				cout << "Scanner em uso pelo processo." << endl;
 				scanner = 1;
 			}
-			if(vetor[indiceP].modem != 0 && modem == 0){
+			if(vetorProcessos[indiceP].modem != 0 && modem == 0){
 				cout << "Modem em uso pelo processo." << endl;
 				modem = 1;
 			}
-			if(vetor[indiceP].disco != 0 && disco == 0){
-				cout << "Disco " << vetor[indiceP].disco << " em uso pelo processo." << endl;
+			if(vetorProcessos[indiceP].disco != 0 && disco == 0){
+				cout << "Disco " << vetorProcessos[indiceP].disco << " em uso pelo processo." << endl;
 				disco = 1;
 			}
 		}
-		
+
 		if(!finalizou){
-			finalizou = verificarFinalizou(vetor);
+			finalizou = verificarFinalizou();
 		}
 		usleep(1000000);
 		tempo++;
-		
 	}
 }
 
 //recebe por parametro o arquivo de processos
 int main(int argc, char** argv){
 	ifstream inputFile;
-	vector<S_processo> vetorProcessos;
+	
 	string linha;
 	S_processo auxiliar;
 	int i;
 	int j;
 	int k;
-	int tempoAtual;
 	int x;
 	
 	
@@ -338,6 +346,7 @@ int main(int argc, char** argv){
 					break;
 			}
 			
+			auxiliar.bloqueado = 0;
 			auxiliar.jaAlocado = 0;
 			aux.clear();
 		}
@@ -346,12 +355,7 @@ int main(int argc, char** argv){
 		linha.clear();
 	}
 
+	processador();
 	
-	//verificarVector(vetorProcessos);
-	
-	processador(vetorProcessos);
-	
-
-
 	return 0;
 }
