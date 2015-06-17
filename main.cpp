@@ -32,6 +32,11 @@ typedef struct S_memoria{
 
 S_memoria vetorMemoria[1024];
 
+int modem;
+int scanner;
+int impressora;
+int disco;
+
 void verificarVector(vector<S_processo> vetor){
 	unsigned int i;
 	
@@ -145,12 +150,39 @@ int memoriaUtilizada(void){
 	return espacoUtilizado;
 }
 
+void desalocar(int blocos){
+	int i,j;
+	int feito;
+	j = 0;
+	for(i = 0;i< blocos;i++){
+		feito = 0;
+		while(feito == 0){
+			if(vetorMemoria[j].ocupado == 1){
+				vetorMemoria[j].ocupado = 0;
+				feito = 1;
+			}else{
+				j++;
+			}
+			
+		}
+	}
+}
+
+int temEspaco(int requisicao){
+	if(1024 - memoriaUtilizada() >= requisicao){
+		return 1;
+	}else{
+		return 0;
+	}
+}
+
 void processador(vector<S_processo> vetor){
 	int tempo = 0;
 	int finalizou = 0;
 	int indiceP;
 	int pidAnterior;
 	bool alocou;
+	int memoriaEmUso;
 	
 	pidAnterior = -1;
 	while(!finalizou){
@@ -159,8 +191,8 @@ void processador(vector<S_processo> vetor){
 		
 		if(indiceP != -1){
 			if(vetor[indiceP].jaAlocado == 0){
-				alocou = alocarMemoria(vetor[indiceP].numBlocos);
-				if(alocou == true) {					
+				if(temEspaco(vetor[indiceP].numBlocos)) {			
+					alocou = alocarMemoria(vetor[indiceP].numBlocos);
 					printDisparador(vetor[indiceP]);
 					cout << endl << "*********Processo " << vetor[indiceP].PID << "**************" << endl;
 					
@@ -171,6 +203,8 @@ void processador(vector<S_processo> vetor){
 					vetor[indiceP].jaAlocado = 1;
 				}else{
 					cout << "Nao ha mais espaco em memoria" << endl;
+					cout << "Finalizando SO." << endl;
+					finalizou = 1;
 				}
 			} else {
 				if(pidAnterior != vetor[indiceP].PID){
@@ -182,17 +216,44 @@ void processador(vector<S_processo> vetor){
 				vetor[indiceP].tempoFaltando--;
 				pidAnterior = vetor[indiceP].PID;
 			}
+			
+			//verificar se acabou
+			if(vetor[indiceP].tempoFaltando == 0){
+				//acabou!
+				//desalocar
+				memoriaEmUso = memoriaUtilizada();
+				cout << memoriaEmUso << " blocos de memória sendo utilizados" << endl;
+				desalocar(vetor[indiceP].numBlocos);
+				cout << "Finalizando processo " << vetor[indiceP].PID << ", Liberando memória." << endl << endl;
+				impressora = 0;
+				scanner = 0;
+				modem = 0;
+				disco = 0;
+			}
+			
+			if(vetor[indiceP].impressora != 0 && impressora == 0){
+				cout << "Impressora " << vetor[indiceP].impressora << " em uso pelo processo." << endl;
+				impressora = 1;
+			}
+			if(vetor[indiceP].scanner != 0 && scanner == 0){
+				cout << "Scanner em uso pelo processo." << endl;
+				scanner = 1;
+			}
+			if(vetor[indiceP].modem != 0 && modem == 0){
+				cout << "Modem em uso pelo processo." << endl;
+				modem = 1;
+			}
+			if(vetor[indiceP].disco != 0 && disco == 0){
+				cout << "Disco " << vetor[indiceP].disco << " em uso pelo processo." << endl;
+				disco = 1;
+			}
 		}
 		
-		finalizou = verificarFinalizou(vetor);
+		if(!finalizou){
+			finalizou = verificarFinalizou(vetor);
+		}
 		usleep(1000000);
 		tempo++;
-		
-		int memoriaEmUso;
-		memoriaEmUso = memoriaUtilizada();
-		if(tempo % 5 == 0){
-			cout << memoriaEmUso << " blocos de memória sendo utilizados" << endl;
-		}
 		
 	}
 }
@@ -225,6 +286,11 @@ int main(int argc, char** argv){
 	for(x=0;x<1024;x++){
 		vetorMemoria[x].ocupado = 0;
 	}
+	
+	impressora = 0;
+	disco = 0;
+	modem = 0;
+	scanner = 0;
 	
 	string aux;
 	aux.clear();
